@@ -6,3 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.82"
+rand = "0.8.5"
+
+
+[[bin]]
+name = "threads"
+path = "examples/thread/main.rs"
+
+[[bin]]
+name = "channel"
+path = "examples/channel/main.rs"

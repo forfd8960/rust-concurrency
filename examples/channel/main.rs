@@ -20,10 +20,13 @@ fn main() -> Result<()> {
             producer(i, tx);
         });
     }
+    drop(tx);
+
     let consumer = thread::spawn(move || {
         for msg in rx {
             println!("msg: {}, {}", msg.idx, msg.value);
         }
+        println!("consumer exit");
     });
 
     consumer.join().map_err(|e| anyhow!("{:?}", e))?;
@@ -34,7 +37,13 @@ fn producer(idx: usize, sender: mpsc::Sender<Message>) {
     loop {
         let value = rand::random::<i32>();
         sender.send(Message::new(idx, value)).unwrap();
-        thread::sleep(Duration::from_millis(1000));
+        let sleep_time = rand::random::<u8>() as u64 * 10;
+        thread::sleep(Duration::from_millis(sleep_time));
+
+        if rand::random::<u8>() % 10 == 0 {
+            println!("producer: {} exit", idx);
+            break;
+        }
     }
 }
 

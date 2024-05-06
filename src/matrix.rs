@@ -3,6 +3,8 @@ use std::fmt;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul};
 
+use crate::vector::Vector;
+
 pub struct Matrix<T> {
     data: Vec<T>,
     rows: usize,
@@ -55,6 +57,15 @@ where
     }
 }
 
+pub fn dot_product<T>(a: Vector<T>, b: Vector<T>) -> Result<T>
+where
+    T: Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T> + std::iter::Sum,
+{
+    assert_eq!(a.len(), b.len(), "a and b must be of the same length");
+
+    Ok(a.iter().zip(b.iter()).map(|(x, y)| *x * *y).sum())
+}
+
 pub fn multiply<T>(a: Matrix<T>, b: Matrix<T>) -> Result<Matrix<T>>
 where
     T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
@@ -92,6 +103,15 @@ mod tests {
         assert_eq!(c.rows, 2);
         assert_eq!(c.cols, 2);
         assert_eq!(c.data, vec![22, 28, 49, 64]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_dot_product() -> anyhow::Result<()> {
+        let a = Vector::new(vec![1, 2]);
+        let b = Vector::new(vec![9, 8]);
+        let c = dot_product(a, b)?;
+        assert_eq!(c, 25);
         Ok(())
     }
 }

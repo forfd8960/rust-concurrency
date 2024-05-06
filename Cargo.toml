@@ -17,3 +17,7 @@ path = "examples/thread/main.rs"
 [[bin]]
 name = "channel"
 path = "examples/channel/main.rs"
+
+[[bin]]
+name = "matrix"
+path = "examples/matrix/main.rs"

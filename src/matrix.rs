@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Ok, Result};
-use std::fmt;
-use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul};
+use std::{fmt, sync::mpsc};
+use std::{fmt::Debug, thread};
 
-use crate::vector::Vector;
+use crate::{dot_product, vector::Vector};
+
+const NUM_THREADS: usize = 4;
 
 pub struct Matrix<T> {
     data: Vec<T>,
@@ -57,18 +59,37 @@ where
     }
 }
 
-pub fn dot_product<T>(a: Vector<T>, b: Vector<T>) -> Result<T>
-where
-    T: Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T> + std::iter::Sum,
-{
-    assert_eq!(a.len(), b.len(), "a and b must be of the same length");
+pub struct MsgInput<T> {
+    idx: usize,
+    row: Vector<T>,
+    col: Vector<T>,
+}
 
-    Ok(a.iter().zip(b.iter()).map(|(x, y)| *x * *y).sum())
+impl<T> MsgInput<T> {
+    fn new(idx: usize, row: Vector<T>, col: Vector<T>) -> Self {
+        Self { idx, row, col }
+    }
+}
+
+pub struct MsgOutput<T> {
+    idx: usize,
+    value: T,
+}
+
+pub struct Msg<T> {
+    input: MsgInput<T>,
+    sender: oneshot::Sender<MsgOutput<T>>,
+}
+
+impl<T> Msg<T> {
+    fn new(input: MsgInput<T>, sender: oneshot::Sender<MsgOutput<T>>) -> Self {
+        Self { input, sender }
+    }
 }
 
 pub fn multiply<T>(a: Matrix<T>, b: Matrix<T>) -> Result<Matrix<T>>
 where
-    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
+    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T> + std::iter::Sum,
 {
     if a.cols != b.rows {
         return Err(anyhow!("matrix multiply err: a.cols != b.rows"));
@@ -77,11 +98,14 @@ where
     let mut data: Vec<T> = vec![T::default(); a.rows * b.cols];
     for i in 0..a.rows {
         for j in 0..b.cols {
-            let mut sum = T::default();
-            for k in 0..a.cols {
-                sum += a.data[i * a.cols + k] * b.data[k * b.cols + j];
-            }
-            data[i * b.cols + j] = sum;
+            let row = Vector::new(a.data[i * a.cols..(i + 1) * a.cols].to_vec());
+            let col_data = b.data[j..]
+                .iter()
+                .step_by(b.cols)
+                .copied()
+                .collect::<Vec<_>>();
+            let col = Vector::new(col_data);
+            data[i * b.cols + j] += dot_product(row, col)?;
         }
     }
 
@@ -92,6 +116,98 @@ where
     })
 }
 
+pub fn multiply_v1<T>(a: Matrix<T>, b: Matrix<T>) -> Result<Matrix<T>>
+where
+    T: Debug
+        + Default
+        + Copy
+        + Add<Output = T>
+        + AddAssign
+        + Mul<Output = T>
+        + std::iter::Sum
+        + Send
+        + 'static,
+{
+    if a.cols != b.rows {
+        return Err(anyhow!("matrix multiply err: a.cols != b.rows"));
+    }
+
+    let senders = (0..NUM_THREADS)
+        .map(|_| {
+            let (tx, rx) = mpsc::channel::<Msg<T>>();
+            thread::spawn(move || {
+                for msg in rx {
+                    let value = dot_product(msg.input.row, msg.input.col)?;
+                    if let Err(e) = msg.sender.send(MsgOutput {
+                        idx: msg.input.idx,
+                        value,
+                    }) {
+                        eprintln!("Send error: {}", e);
+                    };
+                }
+                anyhow::Ok(())
+            });
+            tx
+        })
+        .collect::<Vec<_>>();
+
+    let matrix_cap = a.rows * b.cols;
+    let mut data: Vec<T> = vec![T::default(); matrix_cap];
+    let mut receivers: Vec<oneshot::Receiver<MsgOutput<T>>> = Vec::with_capacity(matrix_cap);
+
+    for i in 0..a.rows {
+        for j in 0..b.cols {
+            let row = Vector::new(a.data[i * a.cols..(i + 1) * a.cols].to_vec());
+            let col_data = b.data[j..]
+                .iter()
+                .step_by(b.cols)
+                .copied()
+                .collect::<Vec<_>>();
+
+            let idx = i * b.cols + j;
+            let col = Vector::new(col_data);
+            let input = MsgInput::new(idx, row, col);
+
+            let (tx, rx) = oneshot::channel();
+            let msg = Msg::new(input, tx);
+            if let Err(e) = senders[idx % NUM_THREADS].send(msg) {
+                eprintln!("Send error: {}", e);
+            }
+
+            receivers.push(rx);
+        }
+    }
+
+    for receiver in receivers {
+        let rev_msg_output = receiver.recv()?;
+        data[rev_msg_output.idx] = rev_msg_output.value
+    }
+
+    Ok(Matrix {
+        data,
+        rows: a.rows,
+        cols: b.cols,
+    })
+}
+
+impl<T> Mul for Matrix<T>
+where
+    T: Debug
+        + Default
+        + Copy
+        + Add<Output = T>
+        + AddAssign
+        + Mul<Output = T>
+        + std::iter::Sum
+        + Send
+        + 'static,
+{
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        multiply_v1(self, rhs).expect("Expect matrix")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +216,44 @@ mod tests {
         let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
         let b = Matrix::new([1, 2, 3, 4, 5, 6], 3, 2);
         let c = multiply(a, b)?;
+        assert_eq!(c.rows, 2);
+        assert_eq!(c.cols, 2);
+        assert_eq!(c.data, vec![22, 28, 49, 64]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiply_v1() -> anyhow::Result<()> {
+        let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+        let b = Matrix::new([1, 2, 3, 4, 5, 6], 3, 2);
+        let c = multiply_v1(a, b)?;
+        assert_eq!(c.rows, 2);
+        assert_eq!(c.cols, 2);
+        assert_eq!(c.data, vec![22, 28, 49, 64]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiply_should_error() {
+        let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+        let b = Matrix::new([1, 2, 3, 4, 5, 6], 2, 2);
+        let c = multiply_v1(a, b);
+        assert!(c.is_err())
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_multiply_should_panic() {
+        let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+        let b = Matrix::new([1, 2, 3, 4, 5, 6], 2, 2);
+        let _ = a * b;
+    }
+
+    #[test]
+    fn test_multiply_matrix() -> anyhow::Result<()> {
+        let a = Matrix::new([1, 2, 3, 4, 5, 6], 2, 3);
+        let b = Matrix::new([1, 2, 3, 4, 5, 6], 3, 2);
+        let c = a * b;
         assert_eq!(c.rows, 2);
         assert_eq!(c.cols, 2);
         assert_eq!(c.data, vec![22, 28, 49, 64]);

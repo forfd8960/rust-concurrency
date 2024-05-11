@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use concurrency::Metrics;
+use concurrency::metrics::Metrics;
 use rand::Rng;
 
 pub fn main() -> anyhow::Result<()> {
@@ -16,8 +16,8 @@ pub fn main() -> anyhow::Result<()> {
     }
 
     loop {
-        thread::sleep(Duration::from_secs(3));
-        println!("{:?}", metric.snapshot());
+        thread::sleep(Duration::from_secs(2));
+        println!("{}", metric);
     }
 
     // anyhow::Ok(())
@@ -34,14 +34,17 @@ fn task_worker(idx: usize, metric: Metrics) {
 }
 
 fn request_worker(metric: Metrics) -> anyhow::Result<()> {
-    thread::spawn(move || loop {
-        let mut rng = rand::thread_rng();
-        thread::sleep(std::time::Duration::from_millis(rng.gen_range(50..500)));
+    thread::spawn(move || {
+        loop {
+            let mut rng = rand::thread_rng();
+            thread::sleep(std::time::Duration::from_millis(rng.gen_range(50..500)));
 
-        let page = rng.gen_range(1..256);
-        if let Err(e) = metric.incr(format!("page-{}", page)) {
-            eprintln!("error: {}", e);
-        };
+            let page = rng.gen_range(1..10);
+            metric.incr(format!("page-{}", page))?;
+        }
+
+        #[allow(unreachable_code)]
+        anyhow::Ok(())
     });
 
     anyhow::Ok(())

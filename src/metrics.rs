@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::fmt;
+use std::sync::{Arc, RwLock};
 
 // incr, decr, snapshot,
 #[derive(Debug, Clone)]
 pub struct Metrics {
-    pub data: Arc<Mutex<HashMap<String, i64>>>,
+    pub data: Arc<RwLock<HashMap<String, i64>>>,
 }
 
 impl Default for Metrics {
@@ -13,17 +14,28 @@ impl Default for Metrics {
     }
 }
 
+impl fmt::Display for Metrics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let data = self.data.read().unwrap();
+        for (k, v) in data.iter() {
+            let _ = writeln!(f, "{}: {}", k, v);
+        }
+
+        std::result::Result::Ok(())
+    }
+}
+
 impl Metrics {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     pub fn incr(&self, key: impl Into<String>) -> anyhow::Result<()> {
         let mut d = self
             .data
-            .lock()
+            .write()
             .map_err(|e| anyhow::anyhow!("error: {:?}", e))?;
         let c = d.entry(key.into()).or_insert(0);
         *c += 1;
@@ -34,20 +46,11 @@ impl Metrics {
     pub fn decr(&self, key: impl Into<String>) -> anyhow::Result<()> {
         let mut d = self
             .data
-            .lock()
+            .write()
             .map_err(|e| anyhow::anyhow!("error: {:?}", e))?;
         let c = d.entry(key.into()).or_insert(0);
         *c -= 1;
 
         anyhow::Ok(())
-    }
-
-    pub fn snapshot(&self) -> anyhow::Result<HashMap<String, i64>> {
-        anyhow::Ok(
-            self.data
-                .lock()
-                .map_err(|e| anyhow::anyhow!("{}", e))?
-                .clone(),
-        )
     }
 }

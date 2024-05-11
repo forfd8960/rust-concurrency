@@ -21,3 +21,7 @@ path = "examples/channel/main.rs"
 [[bin]]
 name = "matrix"
 path = "examples/matrix/main.rs"
+
+[[bin]]
+name = "metrics"
+path = "examples/metrics/main.rs"

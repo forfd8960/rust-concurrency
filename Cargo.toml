@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1.0.82"
 rand = "0.8.5"
 oneshot = "0.1.6"
+dashmap = "5.5.3"
 
 [[bin]]
 name = "threads"

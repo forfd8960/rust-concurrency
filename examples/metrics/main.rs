@@ -12,7 +12,7 @@ pub fn main() -> anyhow::Result<()> {
     }
 
     for _ in 0..3 {
-        request_worker(metric.clone())?;
+        request_worker(metric.clone());
     }
 
     loop {
@@ -27,25 +27,16 @@ fn task_worker(idx: usize, metric: Metrics) {
     thread::spawn(move || loop {
         thread::sleep(std::time::Duration::from_millis(1000));
 
-        if let Err(e) = metric.incr(format!("request-{}", idx)) {
-            eprintln!("error: {}", e);
-        };
+        metric.incr(format!("request-{}", idx))
     });
 }
 
-fn request_worker(metric: Metrics) -> anyhow::Result<()> {
-    thread::spawn(move || {
-        loop {
-            let mut rng = rand::thread_rng();
-            thread::sleep(std::time::Duration::from_millis(rng.gen_range(50..500)));
+fn request_worker(metric: Metrics) {
+    thread::spawn(move || loop {
+        let mut rng = rand::thread_rng();
+        thread::sleep(std::time::Duration::from_millis(rng.gen_range(50..500)));
 
-            let page = rng.gen_range(1..10);
-            metric.incr(format!("page-{}", page))?;
-        }
-
-        #[allow(unreachable_code)]
-        anyhow::Ok(())
+        let page = rng.gen_range(1..10);
+        metric.incr(format!("page-{}", page));
     });
-
-    anyhow::Ok(())
 }

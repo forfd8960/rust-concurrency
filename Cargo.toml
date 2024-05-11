@@ -26,3 +26,8 @@ path = "examples/matrix/main.rs"
 [[bin]]
 name = "metrics"
 path = "examples/metrics/main.rs"
+
+
+[[bin]]
+name = "metrics1"
+path = "examples/metrics1/main.rs"

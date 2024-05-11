@@ -5,17 +5,17 @@ use dashmap::DashMap;
 
 // incr, decr, snapshot,
 #[derive(Debug, Clone)]
-pub struct Metrics {
+pub struct CMapMetrics {
     pub data: Arc<DashMap<String, i64>>,
 }
 
-impl Default for Metrics {
+impl Default for CMapMetrics {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl fmt::Display for Metrics {
+impl fmt::Display for CMapMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for entry in self.data.iter() {
             let _ = writeln!(f, "{}: {}", entry.key(), entry.value());
@@ -25,7 +25,7 @@ impl fmt::Display for Metrics {
     }
 }
 
-impl Metrics {
+impl CMapMetrics {
     pub fn new() -> Self {
         Self {
             data: Arc::new(DashMap::new()),

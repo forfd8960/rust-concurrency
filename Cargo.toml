@@ -10,6 +10,9 @@ anyhow = "1.0.82"
 rand = "0.8.5"
 oneshot = "0.1.6"
 dashmap = "5.5.3"
+tokio = { version = "1.37.0", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [[bin]]
 name = "threads"
@@ -31,3 +34,7 @@ path = "examples/metrics/main.rs"
 [[bin]]
 name = "metrics1"
 path = "examples/metrics1/main.rs"
+
+[[bin]]
+name = "redis"
+path = "examples/redis/main.rs"
